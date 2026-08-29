@@ -1,0 +1,12 @@
+entranceAssembly: ClassIsland.ClassReset.dll
+name: 课后自动复原
+id: gordon.classreset
+description: 下课后自动把电脑恢复原状：关闭学生开的程序、弹出 U 盘、清理桌面。执行前全屏倒计时，点击屏幕即取消；支持按科目定制与定时关机。
+version: 1.0.0.0
+apiVersion: 2.0.0.0
+author: GordonYoung
+icon: icon.png
+url: https://github.com/Gordonynh/ClassReset
+readme: README.md
+supportedOSPlatforms:
+  - Windows

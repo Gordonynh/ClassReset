@@ -1,0 +1,274 @@
+<ci:SettingsPageBase xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:ci="http://classisland.tech/schemas/xaml/core"
+                     xmlns:controls="clr-namespace:FluentAvalonia.UI.Controls;assembly=FluentAvalonia"
+                     xmlns:shared="using:ClassIsland.PluginShared"
+                     x:Class="ClassIsland.ClassReset.Views.ResetSettingsPage">
+    <ScrollViewer>
+        <StackPanel Classes="settings-container animated-intro">
+
+            <TextBlock Classes="l-instructive" TextWrapping="Wrap"
+                       Text="下课后若电脑未恢复原状，全屏倒计时提示，超时自动重置。点击屏幕任意位置取消。"/>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xE9F5;" Text="当前状态" Margin="0 0 0 4"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE9F5;}"
+                                       Header="立即检查"
+                                       Description="{Binding StatusText}">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Click="OnRefresh">
+                            <ci:IconText Glyph="&#xE117;" Text="刷新"/>
+                        </Button>
+                        <Button Click="OnPreview">
+                            <ci:IconText Glyph="&#xE7B3;" Text="演练一次"/>
+                        </Button>
+                        <Button Click="OnPreviewShutdown">
+                            <ci:IconText Glyph="&#xE7E8;" Text="演练关机"/>
+                        </Button>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE81C;}"
+                                       Header="执行记录"
+                                       Description="{Binding HistoryText}"/>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xE8A5;" Text="桌面基线" Margin="0 0 0 4"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8A5;}"
+                                       Header="录入桌面布局"
+                                       Description="{Binding BaselineText}">
+                <controls:SettingsExpander.Footer>
+                    <Button Click="OnCapture">
+                        <ci:IconText Glyph="&#xE722;" Text="录入当前布局"/>
+                    </Button>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xEA8F;" Text="触发" Margin="0 0 0 4"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xEA8F;}" Header="启用课后自动复原">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.IsEnabled, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE823;}"
+                                       Header="下课后检查延迟">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="10" Maximum="300" TickFrequency="5"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.DelaySecondsAfterClass, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="54"
+                                   Text="{Binding Settings.DelaySecondsAfterClass, StringFormat='{}{0} 秒'}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE916;}"
+                                       Header="倒计时时长"
+                                       Description="倒计时期间点击屏幕任意位置取消。">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="3" Maximum="60" TickFrequency="1"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.CountdownSeconds, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="54"
+                                   Text="{Binding Settings.CountdownSeconds, StringFormat='{}{0} 秒'}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE80A;}"
+                                       Header="全屏动画颗粒"
+                                       Description="{Binding CellSizeSummary}">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="3" Maximum="40" TickFrequency="1"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.OverlayCellSize, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="54"
+                                   Text="{Binding CellSizeText}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8BD;}"
+                                       Header="连堂不重置"
+                                       Description="下节课与上节课为同一科目时不重置。">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.SkipWhenSameSubject, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE787;}"
+                                       Header="连堂中断时刻"
+                                       Description="{Binding AcrossTimesSummary}">
+                <shared:TokenListEditor x:Name="AcrossTimesEditor"/>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE768;}"
+                                       Header="下课后无倒计时强制重置"
+                                       Description="按刚下课的那节课算。">
+                <shared:TokenListEditor x:Name="InstantSubjectsEditor"/>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE711;}"
+                                       Header="下课不进行重置"
+                                       Description="按刚下课的那节课算。">
+                <shared:TokenListEditor x:Name="NeverSubjectsEditor"/>
+            </controls:SettingsExpander>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xE7BA;" Text="触发条件" Margin="0 0 0 4"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE737;}" Header="存在未关闭的窗口">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.TriggerOnOpenWindows, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8A5;}" Header="桌面布局有变动">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.TriggerOnDesktopChanged, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE88E;}" Header="存在未弹出的 U 盘">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.TriggerOnRemovableDrive, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE71C;}"
+                                       Header="强制触发关键词"
+                                       Description="窗口标题或程序名含这些词即触发重置。候选取自当前运行的程序。">
+                <shared:TokenListEditor x:Name="KeywordsEditor"/>
+            </controls:SettingsExpander>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xE74D;" Text="重置内容" Margin="0 0 0 4"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8BB;}"
+                                       Header="关闭任务栏程序"
+                                       Description="仅关闭任务栏上可见的程序。资源管理器只关窗口，系统进程不受影响。">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.CloseTaskbarApps, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE711;}"
+                                       Header="无法关闭时强制结束"
+                                       Description="先让程序自行退出，超时未退出则强制结束。">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.ForceKillIfNotClosed, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE916;}" Header="强制结束前的等待">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="1000" Maximum="15000" TickFrequency="500"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.GraceMilliseconds, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="54"
+                                   Text="{Binding GraceText}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE71C;}"
+                                       Header="不会被自动关闭的程序"
+                                       Description="系统程序默认受保护，无需添加。">
+                <shared:TokenListEditor x:Name="NeverCloseEditor"/>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE88E;}" Header="弹出 U 盘">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.EjectRemovableDrives, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE74D;}"
+                                       Header="新增文件移入回收站"
+                                       Description="{Binding RecycleWarning}">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.RecycleNewDesktopItems, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8B7;}"
+                                       Header="新增文件夹一并清理"
+                                       Description="过大的文件夹自动跳过，并在记录中说明。">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.RecycleNewDesktopFolders, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE9D5;}"
+                                       Header="单次清理上限"
+                                       Description="新增项超过此数量时仅记录、不删除，防止误删。">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="1" Maximum="100" TickFrequency="1"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.MaxRecycleItems, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="54"
+                                   Text="{Binding Settings.MaxRecycleItems, StringFormat='{}{0} 项'}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8A5;}" Header="恢复图标位置">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.RestoreIconPositions, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xE7E8;" Text="定时关机" Margin="0 0 0 4"/>
+
+            <TextBlock Classes="l-instructive" TextWrapping="Wrap"
+                       Text="到点先重置，后关机。倒计时期间点击屏幕或按任意键取消。"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE7E8;}" Header="启用定时关机">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.AutoShutdownEnabled, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE787;}"
+                                       Header="关机时刻"
+                                       Description="{Binding ShutdownTimesSummary}">
+                <shared:TokenListEditor x:Name="ShutdownTimesEditor"/>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE711;}"
+                                       Header="关机前强制退出程序"
+                                       Description="避免「是否保存」等弹窗阻塞关机。受保护的程序不受影响。">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.KillAppsBeforeShutdown, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE916;}"
+                                       Header="关机倒计时时长">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="5" Maximum="120" TickFrequency="5"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.ShutdownCountdownSeconds, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="54"
+                                   Text="{Binding Settings.ShutdownCountdownSeconds, StringFormat='{}{0} 秒'}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+        </StackPanel>
+    </ScrollViewer>
+</ci:SettingsPageBase>
