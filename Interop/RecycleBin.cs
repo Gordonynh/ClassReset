@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 
@@ -9,9 +10,11 @@ namespace ClassIsland.ClassReset.Interop;
 /// 把文件/文件夹移到回收站。
 /// </summary>
 /// <remarks>
-/// 用 <c>SHFileOperation</c> 加 <c>FOF_ALLOWUNDO</c>，也就是资源管理器里按 Delete 的效果。
-/// <b>刻意不用 <c>File.Delete</c></b>——学生放在桌面上的东西可能是他自己要交的作业，
-/// 直接永久删除是不可接受的。进了回收站还能还原。
+/// <see cref="Send"/> 用 <c>SHFileOperation</c> 加 <c>FOF_ALLOWUNDO</c>，
+/// 也就是资源管理器里按 Delete 的效果，进了回收站还能还原——
+/// 学生放在桌面上的可能是他自己要交的作业，默认路径必须是可还原的。
+/// <para/>
+/// <see cref="Delete"/> 是永久删除，只在调用方明确开了「直接删除」时才用。
 /// <para/>
 /// 同时带 <c>FOF_NOCONFIRMATION</c> 和 <c>FOF_SILENT</c>：这是无人值守的清理，
 /// 不能弹确认框卡住流程。
@@ -56,7 +59,9 @@ internal static class RecycleBin
                 return [];
             }
 
-            return list;
+            // SHFileOperation 报成功也可能什么都没删（有些位置会静默忽略），
+            // 所以按「路径是不是真的不在了」来算，而不是信返回码。
+            return list.Where(x => !File.Exists(x) && !Directory.Exists(x)).ToList();
         }
         catch (Exception)
         {
@@ -64,7 +69,59 @@ internal static class RecycleBin
         }
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    /// <summary>
+    /// 直接删除，不进回收站。
+    /// </summary>
+    /// <remarks>
+    /// <b>永久删除，删了找不回来。</b>只在调用方明确开了「直接删除」时才走这里。
+    /// 逐个删而不是批量：一项失败不该连累其余，而且要能如实报出删掉了几个。
+    /// </remarks>
+    /// <returns>确实已经不在了的路径。</returns>
+    public static List<string> Delete(IEnumerable<string> paths)
+    {
+        var done = new List<string>();
+        foreach (var path in paths.Where(x => !string.IsNullOrWhiteSpace(x))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, recursive: true);
+                }
+                else if (File.Exists(path))
+                {
+                    // 只读属性会让 Delete 抛异常，先摘掉。
+                    File.SetAttributes(path, FileAttributes.Normal);
+                    File.Delete(path);
+                }
+            }
+            catch (Exception)
+            {
+                // 单项失败不影响其余，最终按「还在不在」统一判定。
+            }
+
+            if (!File.Exists(path) && !Directory.Exists(path))
+            {
+                done.Add(path);
+            }
+        }
+
+        return done;
+    }
+
+    /// <summary>
+    /// <c>SHFILEOPSTRUCTW</c>。
+    /// </summary>
+    /// <remarks>
+    /// <b>绝对不能写 <c>Pack = 1</c>。</b>这个结构体在头文件里用的是默认对齐，
+    /// 强行按 1 字节紧排会让 <c>pFrom</c> 之后的每个字段偏移都错位：
+    /// x64 上 <c>fFlags</c> 应该在 32、紧排会算到 28，
+    /// 于是 shell 把结构体后半段当指针解引用，直接
+    /// <c>AccessViolationException</c> 把整个进程带走——
+    /// 而且这种异常是<b>接不住的</b>，外面包多少层 try/catch 都没用。
+    /// </remarks>
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct ShFileOpStruct
     {
         public IntPtr hwnd;

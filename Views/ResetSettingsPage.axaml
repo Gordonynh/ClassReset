@@ -27,6 +27,9 @@
                         <Button Click="OnPreviewShutdown">
                             <ci:IconText Glyph="&#xE7E8;" Text="演练关机"/>
                         </Button>
+                        <Button Click="OnRunNow" Classes="accent">
+                            <ci:IconText Glyph="&#xE768;" Text="立即执行"/>
+                        </Button>
                     </StackPanel>
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
@@ -34,6 +37,9 @@
             <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE81C;}"
                                        Header="执行记录"
                                        Description="{Binding HistoryText}"/>
+
+            <TextBlock Classes="l-instructive" TextWrapping="Wrap"
+                       Text="「演练一次」只报告不动手，验不出到底删没删掉、程序关没关得掉。「立即执行」会真的执行，不受启用开关约束，倒计时期间可点掉。"/>
 
             <Separator Margin="0 12 0 4"/>
             <ci:IconText Glyph="&#xE8A5;" Text="桌面基线" Margin="0 0 0 4"/>
@@ -94,6 +100,40 @@
                                 Value="{Binding Settings.OverlayCellSize, Mode=TwoWay}"/>
                         <TextBlock VerticalAlignment="Center" MinWidth="54"
                                    Text="{Binding CellSizeText}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE117;}"
+                                       Header="取消后重试"
+                                       Description="取消往往只是「现在不方便」。隔一段时间再问一次，重试前会重新判定，已经收拾干净就不再打扰。">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.RetryAfterCancel, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE916;}"
+                                       Header="重试间隔">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="30" Maximum="900" TickFrequency="30"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.RetryDelaySeconds, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="60" Text="{Binding RetryDelayText}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE9D5;}"
+                                       Header="最多重试次数"
+                                       Description="到次数还没通过就这一轮作罢，不再打扰。">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="0" Maximum="5" TickFrequency="1"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.MaxRetries, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="60"
+                                   Text="{Binding Settings.MaxRetries, StringFormat='{}{0} 次'}"/>
                     </StackPanel>
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
@@ -199,6 +239,14 @@
                                        Description="{Binding RecycleWarning}">
                 <controls:SettingsExpander.Footer>
                     <ToggleSwitch IsChecked="{Binding Settings.RecycleNewDesktopItems, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE74D;}"
+                                       Header="直接删除，不放入回收站"
+                                       Description="{Binding DirectDeleteWarning}">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.DeleteWithoutRecycleBin, Mode=TwoWay}"/>
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 

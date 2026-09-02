@@ -88,6 +88,25 @@ public partial class ResetSettings : ObservableObject
     [ObservableProperty] private int _shutdownCountdownSeconds = 30;
 
     /// <summary>
+    /// 被取消之后过一会儿再来一次。
+    /// </summary>
+    /// <remarks>
+    /// 取消往往不是「不要执行」，而是「现在不方便」——正讲着课、正播着视频。
+    /// 隔几分钟重新问一次，比一次被取消就整轮作废合理。
+    /// 重试前会重新判定一次条件：桌面已经收拾干净了就不再打扰。
+    /// </remarks>
+    [ObservableProperty] private bool _retryAfterCancel = true;
+
+    /// <summary>取消后隔多少秒重试。</summary>
+    [ObservableProperty] private int _retryDelaySeconds = 180;
+
+    /// <summary>
+    /// 最多重试几次。
+    /// </summary>
+    /// <remarks>不设上限就成了没完没了的骚扰，到次数还没通过就这一轮作罢。</remarks>
+    [ObservableProperty] private int _maxRetries = 2;
+
+    /// <summary>
     /// 关机前先强制退出任务栏上的软件。
     /// </summary>
     /// <remarks>
@@ -161,6 +180,21 @@ public partial class ResetSettings : ObservableObject
     /// 现在改成直接给一个绝对值，和基线大小无关。
     /// </remarks>
     [ObservableProperty] private int _maxRecycleItems = 25;
+
+    /// <summary>
+    /// 直接删除，不放入回收站。
+    /// </summary>
+    /// <remarks>
+    /// <b>开了就是永久删除，找不回来。</b>默认关。
+    /// <para/>
+    /// 之所以要这个开关：回收站不是随处可用的，而老版本一旦判定「不支持回收站」
+    /// 就整批只记录不删除，表现成清理从来不生效。现在的做法是
+    /// 先试回收站，失败再看这个开关决定要不要退到直接删除。
+    /// <para/>
+    /// 真正拦住误删的不是这个开关，而是基线的身份绑定（机器名 + 用户 SID + 桌面路径）
+    /// 和数量、体积熔断——它们在这条路径上一条都没放松。
+    /// </remarks>
+    [ObservableProperty] private bool _deleteWithoutRecycleBin;
 
     /// <summary>恢复桌面图标位置。</summary>
     [ObservableProperty] private bool _restoreIconPositions = true;

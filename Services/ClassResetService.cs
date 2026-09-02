@@ -54,6 +54,44 @@ internal sealed class ClassResetService : IHostedService
     /// <summary>正在跑复原流程。这期间不接新的触发。</summary>
     private bool _busy;
 
+    /// <summary>当前进行到哪一档流程。</summary>
+    private enum Flow
+    {
+        /// <summary>没有流程在跑。</summary>
+        None,
+
+        /// <summary>下课复原。</summary>
+        Reset,
+
+        /// <summary>定时关机（含关机前的那遍复原）。</summary>
+        Shutdown
+    }
+
+    /// <summary>
+    /// 正在进行的流程。倒计时期间也算，不是只有执行期间才算。
+    /// </summary>
+    /// <remarks>
+    /// <b>这是「关机和下课重置打架」的修复点。</b>
+    /// <see cref="ResetOverlayWindow.Show"/> 会先把已有的遮罩按「取消」收掉，
+    /// 而 <c>_busy</c> 只在真正执行时才为真、倒计时期间是假的。
+    /// 于是 12:30 这种既是关机点、又正好是下课点的时刻，
+    /// 关机倒计时刚弹出来，十几秒后下课复原的判定就到了，
+    /// 后者一 Show 就把关机遮罩当成「用户取消」收掉——
+    /// 日志里留下一条「定时关机已取消」，关机则再也不会发生。
+    /// <para/>
+    /// 现在倒计时一开始就占住这个字段，同级或更低优先级的流程不再插队；
+    /// 关机比复原高一档，可以接管（见 <see cref="CheckShutdown"/>）。
+    /// </remarks>
+    private Flow _flow = Flow.None;
+
+    /// <summary>取消之后的重试计数，按流程分开记。</summary>
+    private int _resetRetries;
+
+    private int _shutdownRetries;
+
+    /// <summary>重试用的一次性定时器，保留引用以便取消。</summary>
+    private DispatcherTimer? _retryTimer;
+
     public ClassResetService(string pluginConfigFolder)
     {
         _desktop = new DesktopLayoutService(pluginConfigFolder);
@@ -94,6 +132,10 @@ internal sealed class ClassResetService : IHostedService
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _timer.Stop();
+        // 重试定时器也要停。留着的话插件停用之后还会再弹一次遮罩。
+        _retryTimer?.Stop();
+        _retryTimer = null;
+        _flow = Flow.None;
         Dispatcher.UIThread.Post(ResetOverlayWindow.CloseCurrent);
         return Task.CompletedTask;
     }
@@ -108,13 +150,20 @@ internal sealed class ClassResetService : IHostedService
             return;
         }
 
-        // 关机的判定和「要不要收拾」互相独立，先走这一条。
+        // 关机的判定先走：它比复原高一档，正在倒计时的复原也让位给它。
         if (CheckShutdown(settings))
         {
             return;
         }
 
         if (!settings.IsEnabled)
+        {
+            return;
+        }
+
+        // 已经有流程在跑（含倒计时）就不要再开一个。
+        // 不加这一条的话，新流程一 Show 就把旧遮罩按「取消」收掉了。
+        if (_flow != Flow.None)
         {
             return;
         }
@@ -174,15 +223,108 @@ internal sealed class ClassResetService : IHostedService
 
         // 「这些科目直接开始」：倒计时秒数传 0，遮罩会跳过阶段一。
         var instant = MatchesSubject(settings.InstantResetSubjects, prevSubject);
-        var seconds = instant ? 0 : settings.CountdownSeconds;
+        _resetRetries = 0;
+        AskThenReset(settings, instant ? $"{prevSubject} 下课，直接重置" : "即将还原系统",
+            instant ? 0 : settings.CountdownSeconds);
+    }
 
+    /// <summary>弹复原倒计时。被取消就按设置排一次重试。</summary>
+    private void AskThenReset(ResetSettings settings, string title, int seconds)
+    {
+        _flow = Flow.Reset;
         Dispatcher.UIThread.Post(() =>
-            ResetOverlayWindow.Show(
-                instant ? $"{prevSubject} 下课，直接重置" : "即将还原系统",
-                seconds,
-                "点击屏幕以取消",
+            ResetOverlayWindow.Show(title, seconds, "点击屏幕以取消",
                 onConfirmed: overlay => RunReset(settings, overlay, dryRun: false, thenShutdown: false),
-                onCancelled: () => Record("已取消")));
+                onCancelled: () => OnCancelled(Flow.Reset, settings)));
+    }
+
+    /// <summary>
+    /// 倒计时被取消了。
+    /// </summary>
+    /// <remarks>
+    /// 取消常常不是「不要执行」而是「现在不方便」——正讲着课、正放着视频。
+    /// 所以隔一段时间再问一次，到次数为止。
+    /// <para/>
+    /// 被更高优先级的流程接管时（复原让位给关机）不算取消，那条路径会先把
+    /// <see cref="_flow"/> 改掉，这里据此认出来并跳过重试。
+    /// </remarks>
+    private void OnCancelled(Flow flow, ResetSettings settings)
+    {
+        if (_flow != flow)
+        {
+            // 已经被别的流程接管，这次「取消」是接管的副作用，不是人点的。
+            return;
+        }
+
+        _flow = Flow.None;
+
+        var isShutdown = flow == Flow.Shutdown;
+        var used = isShutdown ? _shutdownRetries : _resetRetries;
+        var max = Math.Max(0, settings.MaxRetries);
+        var what = isShutdown ? "定时关机" : "重置";
+
+        if (!settings.RetryAfterCancel || used >= max)
+        {
+            Record($"{what}已取消" + (settings.RetryAfterCancel && max > 0 ? "，重试次数已用完" : string.Empty));
+            return;
+        }
+
+        var delay = Math.Max(10, settings.RetryDelaySeconds);
+        if (isShutdown)
+        {
+            _shutdownRetries++;
+        }
+        else
+        {
+            _resetRetries++;
+        }
+
+        Record($"{what}已取消，{delay} 秒后重试（第 {used + 1}/{max} 次）");
+
+        _retryTimer?.Stop();
+        _retryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(delay) };
+        _retryTimer.Tick += (_, _) =>
+        {
+            _retryTimer?.Stop();
+            _retryTimer = null;
+            Retry(flow, ResetSettings.Current);
+        };
+        _retryTimer.Start();
+    }
+
+    /// <summary>重试一次被取消的流程。重试前重新判定条件。</summary>
+    private void Retry(Flow flow, ResetSettings settings)
+    {
+        if (_busy || _flow != Flow.None)
+        {
+            return;
+        }
+
+        if (flow == Flow.Shutdown)
+        {
+            BeginScheduledShutdown(settings);
+            return;
+        }
+
+        if (!settings.IsEnabled)
+        {
+            return;
+        }
+
+        // 期间可能已经收拾干净了，或者又上课了——这两种情况都不该再打扰。
+        if (_lessons?.CurrentState == TimeState.OnClass)
+        {
+            Record("重试取消：已经上课");
+            return;
+        }
+
+        if (CollectReasons(settings).Count == 0)
+        {
+            Record("重试取消：已无需重置");
+            return;
+        }
+
+        AskThenReset(settings, "即将还原系统", settings.CountdownSeconds);
     }
 
     /// <summary>科目名在不在这个列表里。空列表永远不命中。</summary>
@@ -416,7 +558,26 @@ internal sealed class ClassResetService : IHostedService
                 continue;
             }
 
+            // 关机比复原高一档。复原正在倒计时的话直接接管——
+            // 关机流程本身就先跑一遍复原，接管不会少做任何事。
+            // 先改 _flow 再 Show：这样被顶掉的那个遮罩触发的 onCancelled
+            // 能认出「不是人点的取消」，不会去排重试。
+            if (_flow == Flow.Reset)
+            {
+                Record("定时关机接管正在进行的重置");
+            }
+            else if (_flow == Flow.Shutdown)
+            {
+                // 关机流程已经在跑了，同一个点不重复弹。
+                return true;
+            }
+
             _shutdownFired.Add(point);
+
+            // 这一轮下课就交给关机流程了，别再单独触发一次复原。
+            _handledThisBreak = true;
+            _shutdownRetries = 0;
+            _flow = Flow.Shutdown;
             Dispatcher.UIThread.Post(() => BeginScheduledShutdown(settings));
             return true;
         }
@@ -432,6 +593,8 @@ internal sealed class ClassResetService : IHostedService
     /// </remarks>
     private void BeginScheduledShutdown(ResetSettings settings)
     {
+        _flow = Flow.Shutdown;
+
         var reasons = settings.IsEnabled ? CollectReasons(settings) : [];
         if (reasons.Count == 0)
         {
@@ -442,7 +605,7 @@ internal sealed class ClassResetService : IHostedService
         ResetOverlayWindow.Show("即将重置并关机", Math.Max(3, settings.CountdownSeconds),
             "点击屏幕以取消",
             onConfirmed: overlay => RunReset(settings, overlay, dryRun: false, thenShutdown: true),
-            onCancelled: () => Record("定时关机已取消"));
+            onCancelled: () => OnCancelled(Flow.Shutdown, settings));
     }
 
     /// <summary>
@@ -455,11 +618,12 @@ internal sealed class ClassResetService : IHostedService
     /// </remarks>
     private void AskThenShutdown(ResetSettings settings)
     {
+        _flow = Flow.Shutdown;
         Dispatcher.UIThread.Post(() =>
             ResetOverlayWindow.Show("即将关机", Math.Max(5, settings.ShutdownCountdownSeconds),
                 "点击屏幕以取消",
                 onConfirmed: overlay => RunShutdown(settings, overlay),
-                onCancelled: () => Record("关机已取消")));
+                onCancelled: () => OnCancelled(Flow.Shutdown, settings)));
     }
 
     /// <summary>关机流程：强制退出软件 → 发关机命令。</summary>
@@ -492,6 +656,13 @@ internal sealed class ClassResetService : IHostedService
                 overlay.SetStep(stepIndex, ok ? ResetStepState.Done : ResetStepState.Failed, message);
                 overlay.FinishExecution(ok ? "再见" : "关机失败");
                 Record(string.Join("；", actions));
+
+                // 关机没成功的话机器还在，流程必须放掉。
+                // 不放的话 _flow 永远停在 Shutdown，此后连下课重置都不会再触发。
+                if (!ok)
+                {
+                    _flow = Flow.None;
+                }
             });
         });
     }
@@ -561,6 +732,8 @@ internal sealed class ClassResetService : IHostedService
     {
         if (_busy)
         {
+            // 没接手就得把位置让出来，否则流程卡在这一档下不来。
+            _flow = Flow.None;
             return;
         }
 
@@ -601,6 +774,12 @@ internal sealed class ClassResetService : IHostedService
             overlay.FinishExecution(dryRun ? "演练结束" : "重置完成");
             Record((dryRun ? "演练：" : string.Empty) +
                    (actions.Count == 0 ? "无需处理" : string.Join("；", actions)));
+
+            // 执行完了就腾出位置；接着要关机的话流程还没结束，仍占着。
+            if (!thenShutdown || dryRun)
+            {
+                _flow = Flow.None;
+            }
 
             if (thenShutdown && !dryRun)
             {
@@ -765,6 +944,8 @@ internal sealed class ClassResetService : IHostedService
         RecycleNewDesktopItems = recycle && source.RecycleNewDesktopItems,
         RecycleNewDesktopFolders = source.RecycleNewDesktopFolders,
         MaxRecycleItems = source.MaxRecycleItems,
+        // 漏掉这一项的话，删除方式在这条路径上会悄悄退回默认值。
+        DeleteWithoutRecycleBin = source.DeleteWithoutRecycleBin,
         RestoreIconPositions = icons && source.RestoreIconPositions
     };
 
@@ -799,17 +980,48 @@ internal sealed class ClassResetService : IHostedService
     public void Preview()
     {
         var settings = ResetSettings.Current;
+        _flow = Flow.Reset;
         Dispatcher.UIThread.Post(() =>
             ResetOverlayWindow.Show("演练：即将还原系统", Math.Max(3, settings.CountdownSeconds),
                 "点击屏幕以取消",
                 onConfirmed: overlay => RunReset(settings, overlay, dryRun: true, thenShutdown: false),
-                onCancelled: () => Record("演练已取消")));
+                onCancelled: () =>
+                {
+                    _flow = Flow.None;
+                    Record("演练已取消");
+                }));
+    }
+
+    /// <summary>
+    /// 设置页里的「立即执行（真实）」：不等下课，当场把该做的都做了。
+    /// </summary>
+    /// <remarks>
+    /// 演练只报告不动手，验不出「到底删没删掉」「程序关没关得掉」这类问题——
+    /// 学校那台就是演练一切正常、真跑起来才发现回收站判定拦住了。
+    /// 所以要有一条能真动手的测试入口。
+    /// <para/>
+    /// 它<b>不受总开关约束</b>：手动按下就是明确的意图，
+    /// 正好用来在没开自动重置的机器上验证一遍再决定要不要开。
+    /// 倒计时照走，随时可以点掉。
+    /// </remarks>
+    public void RunNow()
+    {
+        if (_busy || _flow != Flow.None)
+        {
+            Record("已有流程正在进行，忽略本次手动执行");
+            return;
+        }
+
+        var settings = ResetSettings.Current;
+        _resetRetries = 0;
+        AskThenReset(settings, "手动执行：即将还原系统", Math.Max(3, settings.CountdownSeconds));
     }
 
     /// <summary>设置页里的「试一下关机提示」：走完整的关机倒计时，但不真关。</summary>
     public void PreviewShutdown()
     {
         var settings = ResetSettings.Current;
+        _flow = Flow.Shutdown;
         Dispatcher.UIThread.Post(() =>
             ResetOverlayWindow.Show("即将关机（演练）", Math.Max(5, settings.ShutdownCountdownSeconds),
                 "点击屏幕以取消",
@@ -822,7 +1034,12 @@ internal sealed class ClassResetService : IHostedService
                     overlay.SetStep(1, ResetStepState.Skipped, "演练，未真正关机");
                     overlay.FinishExecution("演练结束");
                     Record($"演练：将强制退出 {dry.Closed.Count} 个程序，未真正关机");
+                    _flow = Flow.None;
                 },
-                onCancelled: () => Record("关机演练已取消")));
+                onCancelled: () =>
+                {
+                    _flow = Flow.None;
+                    Record("关机演练已取消");
+                }));
     }
 }

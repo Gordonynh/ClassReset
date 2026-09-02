@@ -174,6 +174,21 @@ public partial class ResetSettingsPage : SettingsPageBase, INotifyPropertyChange
 
     public string GraceText => $"{Settings.GraceMilliseconds / 1000.0:F1} 秒";
 
+    public string RetryDelayText
+    {
+        get
+        {
+            var s = Settings.RetryDelaySeconds;
+            return s < 60 ? $"{s} 秒" : $"{s / 60.0:0.#} 分钟";
+        }
+    }
+
+    /// <summary>直接删除那一项的说明。开着时必须把「找不回来」说在明面上。</summary>
+    public string DirectDeleteWarning =>
+        Settings.DeleteWithoutRecycleBin
+            ? "⚠ 已开启：桌面上新增的文件会被永久删除，不进回收站，无法找回。"
+            : "先尝试回收站；回收站用不了时如实上报而不删除。开启后则直接永久删除。";
+
     public string CellSizeText => $"{Settings.OverlayCellSize:F0} px";
 
     /// <summary>
@@ -211,10 +226,16 @@ public partial class ResetSettingsPage : SettingsPageBase, INotifyPropertyChange
     {
         get
         {
+            if (Settings.DeleteWithoutRecycleBin)
+            {
+                return "当前为直接删除，删掉找不回来。过大的文件与文件夹仍会自动跳过。";
+            }
+
             var desktop = DesktopLayoutService.UserDesktop;
             if (!DesktopLayoutService.CanRecycleOnDesktop)
             {
-                return $"⚠ 桌面（{desktop}）不支持回收站，此项即使开启也不会删除文件。";
+                return $"⚠ 桌面（{desktop}）可能不支持回收站。届时会如实上报而不删除，" +
+                       "确需清理请开启下面的「直接删除」。";
             }
 
             return "新增文件移入回收站，可随时找回。过大的文件自动跳过。";
@@ -263,6 +284,7 @@ public partial class ResetSettingsPage : SettingsPageBase, INotifyPropertyChange
     private void RefreshLight()
     {
         Raise(nameof(GraceText), nameof(CellSizeText), nameof(CellSizeSummary),
+            nameof(RetryDelayText), nameof(DirectDeleteWarning), nameof(RecycleWarning),
             nameof(AcrossTimesSummary), nameof(ShutdownTimesSummary), nameof(HistoryText));
     }
 
@@ -284,6 +306,8 @@ public partial class ResetSettingsPage : SettingsPageBase, INotifyPropertyChange
     private void OnRefresh(object? sender, RoutedEventArgs e) => Refresh();
 
     private void OnPreview(object? sender, RoutedEventArgs e) => _service?.Preview();
+
+    private void OnRunNow(object? sender, RoutedEventArgs e) => _service?.RunNow();
 
     private void OnPreviewShutdown(object? sender, RoutedEventArgs e) => _service?.PreviewShutdown();
 

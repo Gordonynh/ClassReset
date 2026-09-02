@@ -275,12 +275,16 @@ internal sealed class DesktopLayoutService
             return actions;
         }
 
-        // 闸 2：回收站可用性。不能进回收站就绝不删——本机桌面在 Parallels 共享盘上，
-        // 实测就是不支持回收站，这时候「删除」等于永久删除，不可接受。
-        if (!CanUseRecycleBin(UserDesktop))
+        // 闸 2：回收站不可用，而又没开「直接删除」时才拦。
+        //
+        // 老版本这里是「探测到不支持回收站就整批不删」，判据还是启发式的
+        // （解析真实路径 + 看盘符类型）。学校那台明明有回收站却被判成不支持，
+        // 结果清理从来不生效。现在把探测降级成一条提示：
+        // 真正的做法是下面先试回收站，失败了再按开关决定退不退到直接删除。
+        if (!settings.DeleteWithoutRecycleBin && !CanUseRecycleBin(UserDesktop))
         {
-            LastSafetyBlock = "桌面所在位置不支持回收站";
-            actions.Add($"新增 {added.Count} 项，该位置不支持回收站，仅记录不删除");
+            LastSafetyBlock = "桌面所在位置可能不支持回收站，且未开启直接删除";
+            actions.Add($"新增 {added.Count} 项，未删除（该位置可能不支持回收站，可在设置里开启直接删除）");
             return actions;
         }
 
@@ -343,10 +347,23 @@ internal sealed class DesktopLayoutService
             return actions;
         }
 
-        var moved = RecycleBin.Send(safe);
+        // 开了「直接删除」就不绕回收站；否则先试回收站，失败的那部分再看要不要退到直接删除。
+        List<string> moved;
+        string how;
+        if (settings.DeleteWithoutRecycleBin)
+        {
+            moved = RecycleBin.Delete(safe);
+            how = "已删除";
+        }
+        else
+        {
+            moved = RecycleBin.Send(safe);
+            how = "已移入回收站";
+        }
+
         if (moved.Count == safe.Count)
         {
-            actions.Add($"已移入回收站 {moved.Count} 项");
+            actions.Add($"{how} {moved.Count} 项");
             return actions;
         }
 
@@ -355,12 +372,30 @@ internal sealed class DesktopLayoutService
         var needsAdmin = !string.IsNullOrEmpty(PublicDesktop) &&
                          failed.Any(x => x.StartsWith(PublicDesktop, StringComparison.OrdinalIgnoreCase));
         var reason = needsAdmin ? "（公共桌面需要管理员权限）" : string.Empty;
-        actions.Add(moved.Count > 0
-            ? $"已移入回收站 {moved.Count} 项，失败 {failed.Count} 项{reason}"
-            : $"移动失败 {failed.Count} 项{reason}");
-        if (needsAdmin)
+
+        // 回收站失败的那部分，若允许直接删除就再补一刀。
+        // 这才是「回收站用不了」的正确处理：退到直接删除，而不是整批放弃。
+        if (!settings.DeleteWithoutRecycleBin || failed.Count == 0)
         {
-            LastSafetyBlock = "公共桌面上的项目需要管理员权限才能删除";
+            actions.Add(moved.Count > 0
+                ? $"{how} {moved.Count} 项，失败 {failed.Count} 项{reason}"
+                : $"处理失败 {failed.Count} 项{reason}");
+            if (needsAdmin)
+            {
+                LastSafetyBlock = "公共桌面上的项目需要管理员权限才能删除";
+            }
+
+            return actions;
+        }
+
+        var forced = RecycleBin.Delete(failed);
+        actions.Add($"{how} {moved.Count} 项；回收站不可用，另直接删除 {forced.Count} 项");
+        if (forced.Count < failed.Count)
+        {
+            LastSafetyBlock = needsAdmin
+                ? "公共桌面上的项目需要管理员权限才能删除"
+                : $"有 {failed.Count - forced.Count} 项删不掉";
+            actions.Add($"仍有 {failed.Count - forced.Count} 项未能删除{reason}");
         }
 
         return actions;
