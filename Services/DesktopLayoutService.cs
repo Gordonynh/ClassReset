@@ -53,12 +53,11 @@ public sealed class DesktopDiff
 /// 桌面布局的录入、比对与复原。
 /// </summary>
 /// <remarks>
-/// <b>这个类里的每一道保险都不是过度设计。</b>本机的桌面是
-/// <c>C:\Mac\Home\Desktop</c>——一个指向 Mac 宿主机的 Parallels 共享目录，
-/// 实测里面有约 217 GB / 22.8 万个文件，而且这个路径<b>不支持回收站</b>。
-/// 只要在共享盘短暂掉线时录了基线（此时枚举得到 0 项），等盘回来，
+/// <b>这个类里的每一道保险都不是过度设计。</b>桌面有可能落在共享目录、
+/// 网络重定向路径或其它不支持回收站的位置上，而这类路径会短暂不可读。
+/// 只要在它掉线时录了基线（此时枚举得到 0 项），等它回来，
 /// 桌面上所有东西都会被判成「新增」——没有下面这些熔断，
-/// 后果就是把老师 Mac 上的资料静默清空。
+/// 后果就是把用户的资料静默清空。
 /// <para/>
 /// 所以删除这条路径上，任何一项不确定都直接放弃并如实上报，绝不「尽力而为」。
 /// </remarks>
@@ -103,9 +102,8 @@ internal sealed class DesktopLayoutService
     /// </summary>
     /// <remarks>
     /// 设置页要如实告诉用户「会不会真的删」，就得走和执行时同一套判断。
-    /// <b>不能拿 <c>DriveInfo.DriveType</c> 顶替</b>——本机桌面是
-    /// <c>C:\Mac\Home\Desktop</c>，DriveType 报的是 <c>Fixed</c>，
-    /// 照它显示会给出「能删」这个错误结论。
+    /// <b>不能拿 <c>DriveInfo.DriveType</c> 顶替</b>——重解析点指向网络位置时，
+    /// DriveType 照样报 <c>Fixed</c>，照它显示会给出「能删」这个错误结论。
     /// </remarks>
     public static bool CanRecycleOnDesktop => CanUseRecycleBin(UserDesktop);
 
@@ -256,7 +254,7 @@ internal sealed class DesktopLayoutService
     /// <remarks>
     /// <b>数量熔断曾经算错过，导致这个功能实际上从没删过东西。</b>
     /// 老版本的上限是 <c>Math.Min(10, Math.Max(1, 基线项目数 / 4))</c>；
-    /// 教室那台机器的基线有 11 项，<c>11 / 4 = 2</c>，
+    /// 基线只有十来项时上限会被算成 <b>2</b>，
     /// 学生只要多放 3 个东西就整批「只上报不删除」。
     /// 熔断的本意是防「基线坏了导致误删一整个桌面」，那是个绝对量的问题，
     /// 和基线本身有多少项没有关系，所以现在直接用
@@ -278,7 +276,7 @@ internal sealed class DesktopLayoutService
         // 闸 2：回收站不可用，而又没开「直接删除」时才拦。
         //
         // 老版本这里是「探测到不支持回收站就整批不删」，判据还是启发式的
-        // （解析真实路径 + 看盘符类型）。学校那台明明有回收站却被判成不支持，
+        // （解析真实路径 + 看盘符类型）。明明有回收站却被判成不支持时，
         // 结果清理从来不生效。现在把探测降级成一条提示：
         // 真正的做法是下面先试回收站，失败了再按开关决定退不退到直接删除。
         if (!settings.DeleteWithoutRecycleBin && !CanUseRecycleBin(UserDesktop))
@@ -491,13 +489,12 @@ internal sealed class DesktopLayoutService
     /// 这个路径能不能进回收站。
     /// </summary>
     /// <remarks>
-    /// <b>不能只看盘符类型。</b>本机桌面是 <c>C:\Mac\Home\Desktop</c>，
-    /// <c>Path.GetPathRoot</c> 给出 <c>C:\</c>、<c>DriveInfo.DriveType</c> 报 <c>Fixed</c>——
-    /// 看起来是本地固定盘，其实它是个指向 Mac 宿主机的重解析点，
-    /// <c>GetFinalPathNameByHandle</c> 解出来是 <c>\?\UNC\Mac\Home\Desktop</c>。
+    /// <b>不能只看盘符类型。</b>桌面若是一个指向网络位置的重解析点，
+    /// <c>Path.GetPathRoot</c> 给出本地盘符、<c>DriveInfo.DriveType</c> 报 <c>Fixed</c>——
+    /// 看起来是本地固定盘，而 <c>GetFinalPathNameByHandle</c> 解出来是 <c>\?\UNC\...</c>。
     /// 网络路径没有回收站，往那儿「删除」就是<b>永久删除</b>。
     /// <para/>
-    /// （也试过 <c>SHQueryRecycleBin</c>，这台机器上对任何路径都返回 E_INVALIDARG，
+    /// （<c>SHQueryRecycleBin</c> 在这类路径上会直接返回 E_INVALIDARG，
     /// 拿它当判据只会得到误判，所以改用解析真实路径。）
     /// </remarks>
     private static bool CanUseRecycleBin(string path)

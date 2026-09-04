@@ -220,7 +220,7 @@ public partial class ResetSettingsPage : SettingsPageBase, INotifyPropertyChange
     /// </summary>
     /// <remarks>
     /// 走的是和执行时同一套判断（解析真实路径），不是看盘符类型——
-    /// 本机桌面在 Parallels 共享盘上，盘符类型报的是 <c>Fixed</c>，看它会得到相反的结论。
+    /// 指向网络位置的重解析点，盘符类型照样报 <c>Fixed</c>，看它会得到相反的结论。
     /// </remarks>
     public string RecycleWarning
     {
@@ -275,7 +275,7 @@ public partial class ResetSettingsPage : SettingsPageBase, INotifyPropertyChange
     /// <remarks>
     /// <b>这里绝对不能带上 <see cref="StatusText"/> 和 <see cref="BaselineText"/>。</b>
     /// 那两个会枚举任务栏窗口、枚举整个桌面目录、还会走 Shell COM 读图标位置；
-    /// 而本机桌面是 Parallels 共享盘（22.8 万个文件）。拖一下滑块就是几十次重算，
+    /// 而桌面可能是个装了几十万个文件的共享目录。拖一下滑块就是几十次重算，
     /// 界面会直接卡死。
     /// <para/>
     /// 也不能带上那些 TextBox 绑的属性（<c>AcrossTimesText</c> 之类）——

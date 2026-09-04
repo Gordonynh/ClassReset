@@ -408,7 +408,7 @@ internal class ResetOverlayWindow : Window
     /// </summary>
     /// <remarks>
     /// 转圈用 <see cref="Arc"/> 加一个每 60 ms 转 24 度的定时器，不用字体里的符号——
-    /// 教室那台机器的中文字体不一定有盲文点阵之类的旋转字符。
+    /// 目标机器的中文字体不一定有盲文点阵之类的旋转字符。
     /// </remarks>
     private sealed class StepRow
     {
