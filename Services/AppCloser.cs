@@ -16,7 +16,8 @@ namespace ClassIsland.ClassReset.Services;
 /// <list type="number">
 /// <item>只处理<b>任务栏上看得见</b>的窗口（<see cref="WindowScanner"/>），
 ///       后台服务、托盘程序、别的插件的浮窗一律不在范围内；</item>
-/// <item>每个进程都先过 <see cref="ProcessGuard"/>，命中保护名单直接跳过；</item>
+/// <item>每个进程都先过 <see cref="ProcessGuard"/>，命中保护名单直接跳过；
+///       强制结束整棵进程树之前，子孙进程也要逐个过一遍；</item>
 /// <item>explorer <b>只关窗口、绝不结束进程</b>——结束了桌面和任务栏就没了；</item>
 /// <item>先发 WM_CLOSE 让程序自己退（这样 WPS 之类还能弹保存提示），
 ///       等一段宽限期，仍然活着才强制结束。</item>
@@ -140,8 +141,16 @@ internal static class AppCloser
                 }
 
                 var name = process.ProcessName;
-                process.Kill(entireProcessTree: true);
+
+                // 整棵树里只要有一个受保护的子孙进程，就只结束它自己。
+                var wholeTree = !ProcessGuard.HasProtectedDescendant(process, settings.NeverCloseProcesses,
+                    out var childReason);
+                process.Kill(entireProcessTree: wholeTree);
                 result.Killed.Add(name);
+                if (!wholeTree)
+                {
+                    result.Skipped.Add($"{name} 的子进程 — {childReason}");
+                }
             }
             catch (Exception ex)
             {
